@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, CreditCard, ShieldCheck, Truck } from "lucide-react"
+import { ArrowLeft, CreditCard, ShieldCheck, Truck } from 'lucide-react'
 import { format } from "date-fns"
 import { de } from "date-fns/locale"
 
@@ -71,17 +71,38 @@ export default function WarenkorbPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [arrivalFlight, setArrivalFlight] = useState("")
   const [departureFlight, setDepartureFlight] = useState("")
+  const [fahrzeug, setFahrzeug] = useState(null)
+  const [extras, setExtras] = useState([])
 
   useEffect(() => {
     // Booking data aus sessionStorage laden
     const storedData = sessionStorage.getItem("bookingData")
     if (storedData) {
-      setBookingData(JSON.parse(storedData))
+      const parsedData = JSON.parse(storedData)
+      setBookingData(parsedData)
+      
+      // Fahrzeugdaten laden
+      fetchFahrzeugData(parsedData.vehicleId)
     } else {
       // Wenn keine Daten vorhanden, zurück zur Fahrzeugseite
       router.push("/suche")
     }
   }, [router])
+  
+  // Fahrzeugdaten aus der API laden
+  const fetchFahrzeugData = async (fahrzeugId) => {
+    try {
+      const response = await fetch(`/api/fahrzeuge/${fahrzeugId}`)
+      if (!response.ok) {
+        throw new Error('Fehler beim Laden der Fahrzeugdaten')
+      }
+      const data = await response.json()
+      setFahrzeug(data)
+      setExtras(data.extras || [])
+    } catch (error) {
+      console.error('Fehler beim Laden der Fahrzeugdaten:', error)
+    }
+  }
 
   // Berechnung der Mietdauer
   const calculateDays = () => {
@@ -96,28 +117,51 @@ export default function WarenkorbPage() {
   const days = calculateDays()
 
   // Buchung abschließen
-  const handleBooking = () => {
+  const handleBooking = async () => {
     setIsLoading(true)
 
-    // Hier würde in einer echten Anwendung die Buchung an den Server gesendet werden
-    // mit den Fluginformationen
-    const finalBookingData = {
-      ...bookingData,
-      arrivalFlight,
-      departureFlight,
-    }
-
-    // Simuliere API-Aufruf
-    console.log("Sending booking data:", finalBookingData)
-
-    setTimeout(() => {
-      // Simuliere erfolgreiche Buchung
+    // Buchungsnummer generieren
+    const buchungsnummer = `BK-${Math.floor(100000 + Math.random() * 900000)}`
+    
+    try {
+      // Buchung in der Datenbank speichern
+      const response = await fetch('/api/buchungen', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          buchungsnummer,
+          fahrzeug_id: bookingData.vehicleId,
+          abholdatum: bookingData.pickupDate,
+          rueckgabedatum: bookingData.returnDate,
+          gesamtpreis: bookingData.totalPrice,
+          zahlungsmethode: paymentMethod,
+          ankunftsflug: arrivalFlight,
+          abflug: departureFlight,
+          extras: bookingData.extras,
+          services: bookingData.services,
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Fehler beim Speichern der Buchung')
+      }
+      
+      // Buchungsdaten aus dem sessionStorage entfernen
       sessionStorage.removeItem("bookingData")
+      
+      // Zur Erfolgsseite weiterleiten
       router.push("/buchung-erfolgreich")
-    }, 2000)
+    } catch (error) {
+      console.error('Fehler bei der Buchung:', error)
+      // Hier könntest du eine Fehlermeldung anzeigen
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  if (!bookingData) {
+  if (!bookingData || !fahrzeug) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
         <p>Lade Buchungsdaten...</p>
@@ -295,12 +339,12 @@ export default function WarenkorbPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-medium">
-                    {fahrzeugData.marke} {fahrzeugData.modell}
+                    {fahrzeug.marke} {fahrzeug.modell}
                   </p>
-                  <p className="text-sm text-muted-foreground">{fahrzeugData.typ}</p>
+                  <p className="text-sm text-muted-foreground">{fahrzeug.typ}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium">{fahrzeugData.preis}€/Tag</p>
+                  <p className="font-medium">{fahrzeug.preis}€/Tag</p>
                 </div>
               </div>
 
@@ -335,7 +379,7 @@ export default function WarenkorbPage() {
                   <div className="flex justify-between">
                     <span>Grundpreis:</span>
                     <span>
-                      {fahrzeugData.preis}€ × {days} Tage = {fahrzeugData.preis * days}€
+                      {fahrzeug.preis}€ × {days} Tage = {fahrzeug.preis * days}€
                     </span>
                   </div>
 
@@ -343,7 +387,7 @@ export default function WarenkorbPage() {
                     <>
                       <p className="font-medium mt-2">Extras:</p>
                       {bookingData.extras.map((extraId) => {
-                        const extra = extrasData.find((e) => e.id === extraId)
+                        const extra = extras.find((e) => e.id === extraId)
                         if (!extra) return null
                         return (
                           <div key={extraId} className="flex justify-between">
@@ -425,4 +469,3 @@ export default function WarenkorbPage() {
     </div>
   )
 }
-
