@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -12,71 +12,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  CarFront,
-  ArrowLeft,
-  MapPin,
-  Fuel,
-  Users,
-  Briefcase,
-  Check,
-  Star,
-  Calendar,
-  ArrowRight,
-  ShieldCheck,
-  Sparkles,
-  ParkingCircle,
-  Train,
-} from "lucide-react"
+import { CarFront, ArrowLeft, MapPin, Fuel, Users, Briefcase, Check, Star, Calendar, ArrowRight, ShieldCheck, Sparkles, ParkingCircle, Train } from 'lucide-react'
 import { format } from "date-fns"
 import { de } from "date-fns/locale"
-
-// Beispieldaten für ein Fahrzeug
-const fahrzeugData = {
-  id: 1,
-  marke: "VW",
-  modell: "Golf",
-  typ: "Kompaktklasse",
-  preis: 35,
-  anbieter: {
-    id: 1,
-    name: "Premium Cars GmbH",
-    adresse: "Berliner Straße 123, 10115 Berlin",
-    telefon: "+49 30 123456789",
-    bewertung: 4.5,
-  },
-  standort: "Berlin",
-  kraftstoff: "Benzin",
-  sitze: 5,
-  kofferraum: "Medium",
-  verfuegbar: true,
-  ausstattung: ["Klimaanlage", "Navigationssystem", "Bluetooth", "USB-Anschluss", "Einparkhilfe", "Sitzheizung"],
-  beschreibung:
-    "Der VW Golf ist ein kompakter und zuverlässiger Wagen, der sich ideal für Stadtfahrten und längere Reisen eignet. Mit seinem sparsamen Benzinmotor und komfortabler Ausstattung bietet er ein ausgezeichnetes Preis-Leistungs-Verhältnis.",
-  bewertungen: [
-    {
-      id: 1,
-      name: "Max Mustermann",
-      bewertung: 5,
-      kommentar: "Tolles Auto, reibungslose Abwicklung. Jederzeit wieder!",
-      datum: "15.03.2025",
-    },
-    {
-      id: 2,
-      name: "Anna Schmidt",
-      bewertung: 4,
-      kommentar: "Gutes Auto, sauber und gepflegt. Abholung hat etwas länger gedauert.",
-      datum: "20.02.2025",
-    },
-  ],
-  extras: [
-    { id: 1, name: "Kindersitz", preis: 5, beschreibung: "Für Kinder von 9-18 kg (Gruppe 1)" },
-    { id: 2, name: "Navigationsgerät", preis: 7, beschreibung: "Aktuelles Modell mit europäischen Karten" },
-    { id: 3, name: "Zusätzlicher Fahrer", preis: 10, beschreibung: "Registrierung eines weiteren Fahrers" },
-    { id: 4, name: "Schneeketten", preis: 8, beschreibung: "Für Winterfahrten in Bergregionen" },
-    { id: 5, name: "Dachgepäckträger", preis: 12, beschreibung: "Für zusätzlichen Stauraum" },
-  ],
-}
 
 // Zusätzliche Services
 const additionalServices = [
@@ -117,6 +55,64 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
   const [datenschutzAccepted, setDatenschutzAccepted] = useState(false)
   const returnDateRef = useRef<HTMLDivElement>(null)
   const [layoutAnimating, setLayoutAnimating] = useState(false)
+  
+  // Neuer State für Fahrzeugdaten aus der Datenbank
+  const [fahrzeugData, setFahrzeugData] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  
+  // Fahrzeugdaten aus der API laden
+  useEffect(() => {
+    async function loadFahrzeugData() {
+      try {
+        setIsLoading(true)
+        const response = await fetch(`/api/fahrzeuge/${params.id}`)
+        if (!response.ok) {
+          throw new Error('Fehler beim Laden der Fahrzeugdaten')
+        }
+        const data = await response.json()
+        setFahrzeugData(data)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadFahrzeugData()
+  }, [params.id])
+  
+  // Zeige Ladeindikator während des Ladens
+  if (isLoading) {
+    return (
+      <div className="bg-gray-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <CarFront className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-pulse" />
+          <p className="text-lg font-medium">Fahrzeugdaten werden geladen...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  // Zeige Fehlermeldung, wenn ein Fehler aufgetreten ist
+  if (error || !fahrzeugData) {
+    return (
+      <div className="bg-gray-50 min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
+          <h2 className="text-xl font-bold mb-4">Fehler beim Laden der Fahrzeugdaten</h2>
+          <p className="text-muted-foreground mb-6">{error || 'Fahrzeug nicht gefunden'}</p>
+          <div className="flex gap-4 justify-center">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Erneut versuchen
+            </Button>
+            <Link href="/suche">
+              <Button>Zurück zur Suche</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Berechnung der Mietdauer und des Gesamtpreises
   const calculateDays = () => {
@@ -130,7 +126,7 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
 
   // Berechnung der Extrakosten
   const extrasTotal = selectedExtras.reduce((sum, extraId) => {
-    const extra = fahrzeugData.extras.find((e) => e.id === extraId)
+    const extra = fahrzeugData.extras?.find((e) => e.id === extraId)
     return sum + (extra ? extra.preis : 0)
   }, 0)
 
@@ -243,7 +239,15 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg border overflow-hidden">
                 <div className="aspect-[16/9] relative bg-gray-200 flex items-center justify-center">
-                  <CarFront className="h-24 w-24 text-gray-400" />
+                  {fahrzeugData.fahrzeug_bilder && fahrzeugData.fahrzeug_bilder.length > 0 ? (
+                    <img 
+                      src={fahrzeugData.fahrzeug_bilder.find(b => b.ist_hauptbild)?.bild_url || fahrzeugData.fahrzeug_bilder[0].bild_url} 
+                      alt={`${fahrzeugData.marke} ${fahrzeugData.modell}`}
+                      className="object-cover w-full h-full"
+                    />
+                  ) : (
+                    <CarFront className="h-24 w-24 text-gray-400" />
+                  )}
                 </div>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">
@@ -261,7 +265,7 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
 
                   <div className="flex items-center gap-2 mb-6">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">{fahrzeugData.anbieter.adresse}</span>
+                    <span className="text-sm text-muted-foreground">{fahrzeugData.anbieter?.adresse}</span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4 mb-6">
@@ -303,10 +307,10 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
                         <div>
                           <h3 className="text-lg font-medium mb-2">Ausstattung</h3>
                           <ul className="grid grid-cols-2 gap-2">
-                            {fahrzeugData.ausstattung.map((item, index) => (
+                            {fahrzeugData.fahrzeug_ausstattung?.map((item, index) => (
                               <li key={index} className="flex items-center gap-2">
                                 <Check className="h-4 w-4 text-green-600" />
-                                <span>{item}</span>
+                                <span>{item.ausstattung}</span>
                               </li>
                             ))}
                           </ul>
@@ -316,42 +320,48 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
                     <TabsContent value="anbieter" className="pt-6">
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-lg font-medium">{fahrzeugData.anbieter.name}</h3>
+                          <h3 className="text-lg font-medium">{fahrzeugData.anbieter?.name}</h3>
                           <div className="flex items-center gap-1">
                             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                            <span className="font-medium">{fahrzeugData.anbieter.bewertung}</span>
+                            <span className="font-medium">{fahrzeugData.anbieter?.bewertung || "Neu"}</span>
                           </div>
                         </div>
-                        <p className="text-muted-foreground">{fahrzeugData.anbieter.adresse}</p>
-                        <p className="text-muted-foreground">Telefon: {fahrzeugData.anbieter.telefon}</p>
-                        <Link href={`/anbieter/${fahrzeugData.anbieter.id}`}>
+                        <p className="text-muted-foreground">{fahrzeugData.anbieter?.adresse}</p>
+                        <p className="text-muted-foreground">Telefon: {fahrzeugData.anbieter?.telefon}</p>
+                        <Link href={`/anbieter/${fahrzeugData.anbieter?.id}`}>
                           <Button variant="outline">Anbieter anzeigen</Button>
                         </Link>
                       </div>
                     </TabsContent>
                     <TabsContent value="bewertungen" className="pt-6">
                       <div className="space-y-6">
-                        {fahrzeugData.bewertungen.map((bewertung) => (
-                          <div key={bewertung.id} className="border-b pb-4 last:border-0">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <p className="font-medium">{bewertung.name}</p>
-                                <p className="text-sm text-muted-foreground">{bewertung.datum}</p>
+                        {fahrzeugData.fahrzeug_bewertungen?.length > 0 ? (
+                          fahrzeugData.fahrzeug_bewertungen.map((bewertung) => (
+                            <div key={bewertung.id} className="border-b pb-4 last:border-0">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <p className="font-medium">Benutzer #{bewertung.user_id}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {new Date(bewertung.erstellt_am).toLocaleDateString('de-DE')}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <Star
+                                      key={i}
+                                      className={`h-4 w-4 ${
+                                        i < bewertung.bewertung ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1">
-                                {Array.from({ length: 5 }).map((_, i) => (
-                                  <Star
-                                    key={i}
-                                    className={`h-4 w-4 ${
-                                      i < bewertung.bewertung ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
-                                    }`}
-                                  />
-                                ))}
-                              </div>
+                              <p className="text-muted-foreground">{bewertung.kommentar}</p>
                             </div>
-                            <p className="text-muted-foreground">{bewertung.kommentar}</p>
-                          </div>
-                        ))}
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground">Noch keine Bewertungen vorhanden.</p>
+                        )}
                       </div>
                     </TabsContent>
                   </Tabs>
@@ -480,7 +490,7 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {fahrzeugData.extras.map((extra) => (
+                      {fahrzeugData.extras?.map((extra) => (
                         <div key={extra.id} className="flex items-start space-x-3 border rounded-lg p-4">
                           <Checkbox
                             id={`extra-${extra.id}`}
@@ -572,7 +582,7 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
                             <div className="mt-2">
                               <div className="font-medium">Extras:</div>
                               {selectedExtras.map((extraId) => {
-                                const extra = fahrzeugData.extras.find((e) => e.id === extraId)
+                                const extra = fahrzeugData.extras?.find((e) => e.id === extraId)
                                 if (!extra) return null
                                 return (
                                   <div key={extraId} className="flex justify-between text-sm">
@@ -755,7 +765,7 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
 
                 <div className="flex items-center gap-2 mb-4">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{fahrzeugData.anbieter.adresse}</span>
+                  <span className="text-sm text-muted-foreground">{fahrzeugData.anbieter?.adresse}</span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-4">
@@ -797,4 +807,3 @@ export default function FahrzeugDetailPage({ params }: { params: { id: string } 
     </div>
   )
 }
-
