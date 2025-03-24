@@ -5,49 +5,10 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Upload, X, Check, ImageIcon } from "lucide-react"
+import { ArrowLeft, Upload, X, Check, ImageIcon, Loader2 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useToast } from "@/components/ui/use-toast"
-
-// Beispieldaten für Fahrzeuge
-// const fahrzeuge = {
-//   "1": {
-//     id: "1",
-//     marke: "BMW",
-//     modell: "3er",
-//     anbieter: {
-//       id: "1",
-//       name: "Premium Cars GmbH",
-//     },
-//     bilder: ["/placeholder.svg?height=300&width=400", "/placeholder.svg?height=300&width=400"],
-//   },
-//   "2": {
-//     id: "2",
-//     marke: "Audi",
-//     modell: "A4",
-//     anbieter: {
-//       id: "1",
-//       name: "Premium Cars GmbH",
-//     },
-//     bilder: [
-//       "/placeholder.svg?height=300&width=400",
-//       "/placeholder.svg?height=300&width=400",
-//       "/placeholder.svg?height=300&width=400",
-//       "/placeholder.svg?height=300&width=400",
-//     ],
-//   },
-//   "3": {
-//     id: "3",
-//     marke: "Mercedes-Benz",
-//     modell: "C-Klasse",
-//     anbieter: {
-//       id: "2",
-//       name: "City Rent GmbH",
-//     },
-//     bilder: ["/placeholder.svg?height=300&width=400", "/placeholder.svg?height=300&width=400"],
-//   },
-// }
 
 export default function FahrzeugBilderPage({ params }: { params: { anbieterId: string; fahrzeugId: string } }) {
   const { anbieterId, fahrzeugId } = params
@@ -55,8 +16,9 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [mainImageIndex, setMainImageIndex] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
-  const [fahrzeug, setFahrzeug] = useState(null)
+  const [fahrzeug, setFahrzeug] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const { toast } = useToast()
 
   // Add this useEffect to fetch the vehicle
@@ -64,27 +26,34 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
     const fetchFahrzeug = async () => {
       try {
         const response = await fetch(`/api/fahrzeuge/${fahrzeugId}`)
-        if (!response.ok) throw new Error("Failed to fetch vehicle")
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to fetch vehicle")
+        }
         const data = await response.json()
         setFahrzeug(data)
 
         // Also fetch the images
         const imagesResponse = await fetch(`/api/fahrzeuge/${fahrzeugId}/bilder`)
-        if (!imagesResponse.ok) throw new Error("Failed to fetch images")
+        if (!imagesResponse.ok) {
+          const errorData = await imagesResponse.json()
+          throw new Error(errorData.error || "Failed to fetch images")
+        }
         const imagesData = await imagesResponse.json()
-        setUploadedImages(imagesData.map((img) => img.url))
 
-        if (imagesData.length > 0) {
-          const mainImageIndex = imagesData.findIndex((img) => img.hauptbild)
+        if (imagesData && imagesData.length > 0) {
+          setUploadedImages(imagesData.map((img: any) => img.url))
+
+          const mainImageIndex = imagesData.findIndex((img: any) => img.hauptbild)
           if (mainImageIndex !== -1) {
             setMainImageIndex(mainImageIndex)
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching vehicle:", error)
         toast({
           title: "Fehler",
-          description: "Fahrzeug konnte nicht geladen werden.",
+          description: `Fahrzeug konnte nicht geladen werden: ${error.message}`,
           variant: "destructive",
         })
       } finally {
@@ -96,18 +65,33 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
   }, [fahrzeugId, anbieterId, toast])
 
   // Update the handleImageUpload function
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files && files.length > 0) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        await uploadImage(file)
+      setUploading(true)
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i]
+          await uploadImage(file)
+        }
+        toast({
+          title: "Erfolg",
+          description: `${files.length} Bild${files.length > 1 ? "er" : ""} hochgeladen.`,
+        })
+      } catch (error: any) {
+        toast({
+          title: "Fehler",
+          description: `Bilder konnten nicht hochgeladen werden: ${error.message}`,
+          variant: "destructive",
+        })
+      } finally {
+        setUploading(false)
       }
     }
   }
 
   // Add this function to handle image upload
-  const uploadImage = async (file) => {
+  const uploadImage = async (file: File) => {
     try {
       const formData = new FormData()
       formData.append("file", file)
@@ -130,32 +114,40 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
       // Update the local state
       setUploadedImages((prev) => [...prev, data.image.url])
 
-      toast({
-        title: "Erfolg",
-        description: "Bild wurde hochgeladen.",
-      })
+      return data
     } catch (error) {
       console.error("Error uploading image:", error)
-      toast({
-        title: "Fehler",
-        description: `Bild konnte nicht hochgeladen werden: ${error.message}`,
-        variant: "destructive",
-      })
+      throw error
     }
   }
 
   // Update the handleDrop function
-  const handleDrop = async (e) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
 
     const files = e.dataTransfer.files
     if (files && files.length > 0) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        if (file.type.startsWith("image/")) {
-          await uploadImage(file)
+      setUploading(true)
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i]
+          if (file.type.startsWith("image/")) {
+            await uploadImage(file)
+          }
         }
+        toast({
+          title: "Erfolg",
+          description: `${files.length} Bild${files.length > 1 ? "er" : ""} hochgeladen.`,
+        })
+      } catch (error: any) {
+        toast({
+          title: "Fehler",
+          description: `Bilder konnten nicht hochgeladen werden: ${error.message}`,
+          variant: "destructive",
+        })
+      } finally {
+        setUploading(false)
       }
     }
   }
@@ -169,43 +161,12 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
     setIsDragging(false)
   }
 
-  // const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const files = e.target.files
-  //   if (files) {
-  //     const newImages = Array.from(files).map((file) => URL.createObjectURL(file))
-  //     setUploadedImages((prev) => [...prev, ...newImages])
-  //   }
-  // }
-
-  // const handleDragOver = (e: React.DragEvent) => {
-  //   e.preventDefault()
-  //   setIsDragging(true)
-  // }
-
-  // const handleDragLeave = () => {
-  //   setIsDragging(false)
-  // }
-
-  // const handleDrop = (e: React.DragEvent) => {
-  //   e.preventDefault()
-  //   setIsDragging(false)
-
-  //   const files = e.dataTransfer.files
-  //   if (files) {
-  //     const newImages = Array.from(files)
-  //       .filter((file) => file.type.startsWith("image/"))
-  //       .map((file) => URL.createObjectURL(file))
-
-  //     setUploadedImages((prev) => [...prev, ...newImages])
-  //   }
-  // }
-
   // Update the setAsMainImage function
-  const setAsMainImage = async (index) => {
+  const setAsMainImage = async (index: number) => {
     try {
       const imageUrl = uploadedImages[index]
 
-      const response = await fetch(`/api/fahrzeuge/${fahrzeugId}/hauptbild`, {
+      const response = await fetch(`/api/fahrzeuge/${fahrzeugId}/bilder/hauptbild`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -213,7 +174,10 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
         body: JSON.stringify({ imageUrl }),
       })
 
-      if (!response.ok) throw new Error("Failed to set main image")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to set main image")
+      }
 
       setMainImageIndex(index)
 
@@ -221,18 +185,18 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
         title: "Erfolg",
         description: "Hauptbild wurde aktualisiert.",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error setting main image:", error)
       toast({
         title: "Fehler",
-        description: "Hauptbild konnte nicht aktualisiert werden.",
+        description: `Hauptbild konnte nicht aktualisiert werden: ${error.message}`,
         variant: "destructive",
       })
     }
   }
 
   // Update the removeImage function
-  const removeImage = async (index) => {
+  const removeImage = async (index: number) => {
     try {
       const imageUrl = uploadedImages[index]
 
@@ -244,7 +208,10 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
         body: JSON.stringify({ imageUrl }),
       })
 
-      if (!response.ok) throw new Error("Failed to remove image")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to remove image")
+      }
 
       setUploadedImages((prev) => prev.filter((_, i) => i !== index))
 
@@ -258,31 +225,23 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
         title: "Erfolg",
         description: "Bild wurde entfernt.",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error removing image:", error)
       toast({
         title: "Fehler",
-        description: "Bild konnte nicht entfernt werden.",
+        description: `Bild konnte nicht entfernt werden: ${error.message}`,
         variant: "destructive",
       })
     }
   }
 
-  // const removeImage = (index: number) => {
-  //   setUploadedImages((prev) => prev.filter((_, i) => i !== index))
-  //   if (mainImageIndex === index) {
-  //     setMainImageIndex(0)
-  //   } else if (mainImageIndex > index) {
-  //     setMainImageIndex((prev) => prev - 1)
-  //   }
-  // }
-
-  // const setAsMainImage = (index: number) => {
-  //   setMainImageIndex(index)
-  // }
-
   if (loading) {
-    return <div>Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Lade Fahrzeugdaten...</span>
+      </div>
+    )
   }
 
   if (!fahrzeug) {
@@ -358,68 +317,97 @@ export default function FahrzeugBilderPage({ params }: { params: { anbieterId: s
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-sm text-center text-muted-foreground mb-2">
-                  Ziehen Sie Bilder hierher oder klicken Sie, um Bilder auszuwählen
-                </p>
-                <p className="text-xs text-center text-muted-foreground mb-4">
-                  Unterstützte Formate: JPG, PNG, WEBP (max. 5MB)
-                </p>
-                <label>
-                  <Button variant="outline" size="sm">
-                    Bilder auswählen
-                  </Button>
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
-                </label>
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                    <p className="text-sm text-center text-muted-foreground">Bilder werden hochgeladen...</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-center text-muted-foreground mb-2">
+                      Ziehen Sie Bilder hierher oder klicken Sie, um Bilder auszuwählen
+                    </p>
+                    <p className="text-xs text-center text-muted-foreground mb-4">
+                      Unterstützte Formate: JPG, PNG, WEBP (max. 5MB)
+                    </p>
+                    <label>
+                      <Button variant="outline" size="sm" disabled={uploading}>
+                        Bilder auswählen
+                      </Button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleImageUpload}
+                        disabled={uploading}
+                      />
+                    </label>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           <div>
             <h3 className="text-lg font-medium mb-2">Alle Bilder</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {uploadedImages.map((image, index) => (
-                <div key={index} className="relative group">
-                  <div
-                    className={`aspect-[4/3] relative rounded-lg overflow-hidden border ${
-                      index === mainImageIndex ? "ring-2 ring-primary" : ""
-                    }`}
-                  >
-                    <Image src={image || "/placeholder.svg"} alt={`Bild ${index + 1}`} fill className="object-cover" />
-                  </div>
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {index !== mainImageIndex && (
+            {uploadedImages.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {uploadedImages.map((image, index) => (
+                  <div key={index} className="relative group">
+                    <div
+                      className={`aspect-[4/3] relative rounded-lg overflow-hidden border ${
+                        index === mainImageIndex ? "ring-2 ring-primary" : ""
+                      }`}
+                    >
+                      <Image
+                        src={image || "/placeholder.svg"}
+                        alt={`Bild ${index + 1}`}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {index !== mainImageIndex && (
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-7 w-7 rounded-full"
+                          onClick={() => setAsMainImage(index)}
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                      )}
                       <Button
-                        variant="secondary"
+                        variant="destructive"
                         size="icon"
                         className="h-7 w-7 rounded-full"
-                        onClick={() => setAsMainImage(index)}
+                        onClick={() => removeImage(index)}
                       >
-                        <Check className="h-3 w-3" />
+                        <X className="h-3 w-3" />
                       </Button>
-                    )}
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="h-7 w-7 rounded-full"
-                      onClick={() => removeImage(index)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  {index === mainImageIndex && (
-                    <div className="absolute bottom-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                      Hauptbild
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    {index === mainImageIndex && (
+                      <div className="absolute bottom-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
+                        Hauptbild
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 border rounded-lg">
+                <ImageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+                <p className="text-muted-foreground">Keine Bilder vorhanden</p>
+              </div>
+            )}
           </div>
         </CardContent>
         <CardFooter className="flex justify-between">
-          <Button variant="outline">Abbrechen</Button>
-          <Button>Änderungen speichern</Button>
+          <Link href="/admin/anbieter/bilder">
+            <Button variant="outline">Zurück zur Übersicht</Button>
+          </Link>
         </CardFooter>
       </Card>
     </div>
