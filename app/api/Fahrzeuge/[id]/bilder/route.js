@@ -55,4 +55,3 @@ export async function DELETE(request, { params }) {
 
   return NextResponse.json({ success: true })
 }
-
