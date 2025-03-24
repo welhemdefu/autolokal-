@@ -1,10 +1,7 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { supabaseAdmin } from "@/lib/supabase"
 import { NextResponse } from "next/server"
 
 export async function POST(request) {
-  const supabase = createRouteHandlerClient({ cookies })
-
   try {
     const formData = await request.formData()
     const file = formData.get("file")
@@ -19,12 +16,17 @@ export async function POST(request) {
     // Create a unique file name
     const fileName = `${Date.now()}_${file.name}`
 
+    // Convert the file to an array buffer
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = new Uint8Array(arrayBuffer)
+
     // Upload file to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from("fahrzeug-bilder")
-      .upload(`${anbieterId}/${fahrzeugId}/${fileName}`, file, {
+      .upload(`${anbieterId}/${fahrzeugId}/${fileName}`, buffer, {
         cacheControl: "3600",
         upsert: false,
+        contentType: file.type,
       })
 
     if (uploadError) {
@@ -35,10 +37,10 @@ export async function POST(request) {
     // Get the public URL
     const {
       data: { publicUrl },
-    } = supabase.storage.from("fahrzeug-bilder").getPublicUrl(`${anbieterId}/${fahrzeugId}/${fileName}`)
+    } = supabaseAdmin.storage.from("fahrzeug-bilder").getPublicUrl(`${anbieterId}/${fahrzeugId}/${fileName}`)
 
     // Save image reference in the database
-    const { data: imageData, error: imageError } = await supabase
+    const { data: imageData, error: imageError } = await supabaseAdmin
       .from("fahrzeug_bilder")
       .insert([
         {
@@ -58,7 +60,7 @@ export async function POST(request) {
 
     // If this is the main image, update the fahrzeug table
     if (isMainImage) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdmin
         .from("fahrzeuge")
         .update({ hauptbild_url: publicUrl })
         .eq("id", fahrzeugId)
