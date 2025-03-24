@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -8,38 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Plus, Edit, Trash2, UserCheck, UserX, ExternalLink, CarFront } from "lucide-react"
 import Link from "next/link"
-
-// Beispieldaten für Anbieter
-const anbieter = [
-  {
-    id: 1,
-    name: "Premium Cars GmbH",
-    email: "info@premium-cars.de",
-    status: "Aktiv",
-    registriert: "10.02.2025",
-    fahrzeuge: 12,
-  },
-  {
-    id: 2,
-    name: "City Rent GmbH",
-    email: "kontakt@city-rent.de",
-    status: "Verifizierung ausstehend",
-    registriert: "05.04.2025",
-    fahrzeuge: 8,
-  },
-  {
-    id: 3,
-    name: "Eco Drive Berlin",
-    email: "info@ecodrive-berlin.de",
-    status: "Aktiv",
-    registriert: "12.01.2025",
-    fahrzeuge: 5,
-  },
-]
+import { useToast } from "@/components/ui/use-toast"
 
 export default function AdminAnbieterPage() {
+  // Move state declarations outside of conditional blocks
+  const [anbieter, setAnbieter] = useState([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("alle")
+  const { toast } = useToast()
 
   // Filtern der Anbieter basierend auf Suchbegriff und Status
   const filteredAnbieter = anbieter.filter((anbieter) => {
@@ -51,6 +28,59 @@ export default function AdminAnbieterPage() {
 
     return matchesSearch && matchesStatus
   })
+
+  // Add this useEffect to fetch providers
+  useEffect(() => {
+    const fetchAnbieter = async () => {
+      try {
+        const response = await fetch("/api/anbieter")
+        if (!response.ok) throw new Error("Failed to fetch providers")
+        const data = await response.json()
+        setAnbieter(data)
+      } catch (error) {
+        console.error("Error fetching providers:", error)
+        toast({
+          title: "Fehler",
+          description: "Anbieter konnten nicht geladen werden.",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAnbieter()
+  }, [toast])
+
+  // Add this function to handle provider updates
+  const handleUpdateAnbieter = async (id, updates) => {
+    try {
+      const response = await fetch(`/api/anbieter/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      })
+
+      if (!response.ok) throw new Error("Failed to update provider")
+
+      // Update the local state
+      setAnbieter((prev) => prev.map((anbieter) => (anbieter.id === id ? { ...anbieter, ...updates } : anbieter)))
+
+      toast({
+        title: "Erfolg",
+        description: "Anbieter wurde aktualisiert.",
+      })
+    } catch (error) {
+      console.error("Error updating provider:", error)
+      toast({
+        title: "Fehler",
+        description: "Anbieter konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      })
+    }
+  }
 
   return (
     <div className="space-y-6">
