@@ -1,56 +1,58 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabaseClient'
+import { supabaseAdmin } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-// Bilder für ein Fahrzeug hochladen
-export async function POST(request, { params }) {
+export async function GET(request, { params }) {
   const { id } = params
-  const formData = await request.formData()
-  const file = formData.get('file')
-  const istHauptbild = formData.get('istHauptbild') === 'true'
-  
-  if (!file) {
-    return NextResponse.json({ error: 'Keine Datei gefunden' }, { status: 400 })
+
+  const { data, error } = await supabaseAdmin
+    .from("fahrzeug_bilder")
+    .select("*")
+    .eq("fahrzeug_id", id)
+    .order("created_at", { ascending: true })
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  
-  // Datei in einen Buffer umwandeln
-  const fileBuffer = await file.arrayBuffer()
-  const fileArray = new Uint8Array(fileBuffer)
-  
-  // Eindeutigen Dateinamen generieren
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${id}/${Date.now()}.${fileExt}`
-  
-  // Bild in Supabase Storage hochladen
-  const { data: uploadData, error: uploadError } = await supabase
-    .storage
-    .from('fahrzeug-bilder')
-    .upload(fileName, fileArray, {
-      contentType: file.type
-    })
-  
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 })
-  }
-  
-  // Öffentliche URL des Bildes abrufen
-  const { data: { publicUrl } } = supabase
-    .storage
-    .from('fahrzeug-bilder')
-    .getPublicUrl(fileName)
-  
-  // Bild-URL in der Datenbank speichern
-  const { data: bildData, error: bildError } = await supabase
-    .from('fahrzeug_bilder')
-    .insert([{
-      fahrzeug_id: id,
-      bild_url: publicUrl,
-      ist_hauptbild: istHauptbild
-    }])
-    .select()
-  
-  if (bildError) {
-    return NextResponse.json({ error: bildError.message }, { status: 500 })
-  }
-  
-  return NextResponse.json(bildData[0])
+
+  return NextResponse.json(data)
 }
+
+export async function DELETE(request, { params }) {
+  const { id } = params
+  const { imageUrl } = await request.json()
+
+  // First, get the image record to find the filename
+  const { data: imageData, error: fetchError } = await supabaseAdmin
+    .from("fahrzeug_bilder")
+    .select("*")
+    .eq("fahrzeug_id", id)
+    .eq("url", imageUrl)
+    .single()
+
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 500 })
+  }
+
+  if (!imageData) {
+    return NextResponse.json({ error: "Image not found" }, { status: 404 })
+  }
+
+  // Delete the image from storage
+  const { error: storageError } = await supabaseAdmin.storage
+    .from("fahrzeug-bilder")
+    .remove([`${imageData.anbieter_id}/${id}/${imageData.dateiname}`])
+
+  if (storageError) {
+    return NextResponse.json({ error: storageError.message }, { status: 500 })
+  }
+
+  // Delete the image record from the database
+  const { error: dbError } = await supabaseAdmin.from("fahrzeug_bilder").delete().eq("id", imageData.id)
+
+  if (dbError) {
+    return NextResponse.json({ error: dbError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+
