@@ -38,4 +38,3 @@ export async function PUT(request, { params }) {
 
   return NextResponse.json({ success: true })
 }
-
